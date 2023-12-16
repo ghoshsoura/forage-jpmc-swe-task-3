@@ -1,0 +1,47 @@
+From 5c9a3d574c150865aab34e3b174dd6a80ed0bbeb Mon Sep 17 00:00:00 2001
+From: Souradeep Ghosh <ghoshsouradeep7@gmail.com>
+Date: Sat, 16 Dec 2023 12:44:48 +0530
+Subject: [PATCH] generate row to display changes
+
+---
+ src/DataManipulator.ts | 25 +++++++++++++++++--------
+ 1 file changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index 4ef35c7..359ee48 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -12,13 +12,22 @@ export interface Row {
+ 
+ 
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]) {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++  static generateRow(serverRespond: ServerRespond[]): Row {
++    const priceABC = (serverRespond[0].top_ask.price + serverRespond[0].top_bid.price)/2;
++    const priceDEF = (serverRespond[1].top_ask.price + serverRespond[1].top_bid.price)/2;
++    const ratio = priceABC / priceDEF;
++    const upperBound = 1 + 0.05
++    const lowerBound = 1 - 0.05
++    
++    return {
++      price_abc: priceABC,
++      price_def: priceDEF,
++      ratio,
++      timestamp: serverRespond[0].timestamp > serverRespond[1].timestamp ?
++        serverRespond[0].timestamp : serverRespond[1].timestamp,
++      upper_bound: upperBound,
++      lower_bound: lowerBound,
++      trigger_alert: (ratio > upperBound || ratio<lowerBound) ? ratio : undefined,
++    };
+   }
+ }
+-- 
+2.43.0.windows.1
+

@@ -1,0 +1,209 @@
+From 10d322c824dadc722431d23e68f7ab1302abd6cc Mon Sep 17 00:00:00 2001
+From: Souradeep Ghosh <ghoshsouradeep7@gmail.com>
+Date: Sat, 16 Dec 2023 12:36:55 +0530
+Subject: [PATCH 1/3] changes to graph file and manipulation file
+
+---
+ src/DataManipulator.ts |  8 ++++++--
+ src/Graph.tsx          | 27 ++++++++++++++++-----------
+ 2 files changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index 7f62295..4ef35c7 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,9 +1,13 @@
+ import { ServerRespond } from './DataStreamer';
+ 
+ export interface Row {
+-  stock: string,
+-  top_ask_price: number,
++  price_abc: number,
++  price_def: number,
++  ratio: number,
+   timestamp: Date,
++  upper_bound: number,
++  lower_bound: number,
++  trigger_alert: number | undefined,
+ }
+ 
+ 
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 277797d..3ac2126 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -1,5 +1,5 @@
+ import React, { Component } from 'react';
+-import { Table } from '@finos/perspective';
++import { Table, TableData } from '@finos/perspective';
+ import { ServerRespond } from './DataStreamer';
+ import { DataManipulator } from './DataManipulator';
+ import './Graph.css';
+@@ -23,10 +23,13 @@ class Graph extends Component<IProps, {}> {
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
+     const schema = {
+-      stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++      price_abc: 'float',
++      price_def: 'float',
++      ratio: 'float',
+       timestamp: 'date',
++      upper_bound: 'float',
++      lower_bound: 'float',
++      trigger_alert: 'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+@@ -36,23 +39,25 @@ class Graph extends Component<IProps, {}> {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio","lower_bound","upper_bound","trigger_alert"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        price_abc: 'avg',
++        price_def: 'avg',
++        ratio: 'avg',
+         timestamp: 'distinct count',
++        upper_bound: 'avg',
++        lower_bound: 'avg',
++        trigger_alert: 'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
++      this.table.update([
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ] as unknown as TableData);
+     }
+   }
+ }
+-- 
+2.43.0.windows.1
+
+
+From 5c9a3d574c150865aab34e3b174dd6a80ed0bbeb Mon Sep 17 00:00:00 2001
+From: Souradeep Ghosh <ghoshsouradeep7@gmail.com>
+Date: Sat, 16 Dec 2023 12:44:48 +0530
+Subject: [PATCH 2/3] generate row to display changes
+
+---
+ src/DataManipulator.ts | 25 +++++++++++++++++--------
+ 1 file changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index 4ef35c7..359ee48 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -12,13 +12,22 @@ export interface Row {
+ 
+ 
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]) {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++  static generateRow(serverRespond: ServerRespond[]): Row {
++    const priceABC = (serverRespond[0].top_ask.price + serverRespond[0].top_bid.price)/2;
++    const priceDEF = (serverRespond[1].top_ask.price + serverRespond[1].top_bid.price)/2;
++    const ratio = priceABC / priceDEF;
++    const upperBound = 1 + 0.05
++    const lowerBound = 1 - 0.05
++    
++    return {
++      price_abc: priceABC,
++      price_def: priceDEF,
++      ratio,
++      timestamp: serverRespond[0].timestamp > serverRespond[1].timestamp ?
++        serverRespond[0].timestamp : serverRespond[1].timestamp,
++      upper_bound: upperBound,
++      lower_bound: lowerBound,
++      trigger_alert: (ratio > upperBound || ratio<lowerBound) ? ratio : undefined,
++    };
+   }
+ }
+-- 
+2.43.0.windows.1
+
+
+From fbdca6128ef5dabaab1d7bcdd3ef4b5c4cd23e6a Mon Sep 17 00:00:00 2001
+From: Souradeep Ghosh <ghoshsouradeep7@gmail.com>
+Date: Sat, 16 Dec 2023 12:59:24 +0530
+Subject: [PATCH 3/3] patch file change
+
+---
+ 0001-generate-row-to-display-changes.patch | 47 ++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+ create mode 100644 0001-generate-row-to-display-changes.patch
+
+diff --git a/0001-generate-row-to-display-changes.patch b/0001-generate-row-to-display-changes.patch
+new file mode 100644
+index 0000000..3989d11
+--- /dev/null
++++ b/0001-generate-row-to-display-changes.patch
+@@ -0,0 +1,47 @@
++From 5c9a3d574c150865aab34e3b174dd6a80ed0bbeb Mon Sep 17 00:00:00 2001
++From: Souradeep Ghosh <ghoshsouradeep7@gmail.com>
++Date: Sat, 16 Dec 2023 12:44:48 +0530
++Subject: [PATCH] generate row to display changes
++
++---
++ src/DataManipulator.ts | 25 +++++++++++++++++--------
++ 1 file changed, 17 insertions(+), 8 deletions(-)
++
++diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
++index 4ef35c7..359ee48 100644
++--- a/src/DataManipulator.ts
+++++ b/src/DataManipulator.ts
++@@ -12,13 +12,22 @@ export interface Row {
++ 
++ 
++ export class DataManipulator {
++-  static generateRow(serverResponds: ServerRespond[]) {
++-    return serverResponds.map((el: any) => {
++-      return {
++-        stock: el.stock,
++-        top_ask_price: el.top_ask && el.top_ask.price || 0,
++-        timestamp: el.timestamp,
++-      };
++-    })
+++  static generateRow(serverRespond: ServerRespond[]): Row {
+++    const priceABC = (serverRespond[0].top_ask.price + serverRespond[0].top_bid.price)/2;
+++    const priceDEF = (serverRespond[1].top_ask.price + serverRespond[1].top_bid.price)/2;
+++    const ratio = priceABC / priceDEF;
+++    const upperBound = 1 + 0.05
+++    const lowerBound = 1 - 0.05
+++    
+++    return {
+++      price_abc: priceABC,
+++      price_def: priceDEF,
+++      ratio,
+++      timestamp: serverRespond[0].timestamp > serverRespond[1].timestamp ?
+++        serverRespond[0].timestamp : serverRespond[1].timestamp,
+++      upper_bound: upperBound,
+++      lower_bound: lowerBound,
+++      trigger_alert: (ratio > upperBound || ratio<lowerBound) ? ratio : undefined,
+++    };
++   }
++ }
++-- 
++2.43.0.windows.1
++
+-- 
+2.43.0.windows.1
+
